@@ -371,14 +371,14 @@ def build_dealer_report_html(
     pages.append(
         f"""
         <section class="page cover">
-          <div class="cover-top">经销商经营状况白皮书</div>
+          <div class="cover-top">经销商经营状况白皮书 &nbsp;·&nbsp; 2025</div>
           <div class="cover-title">{dealer_name or "—"}</div>
-          <div class="cover-sub">经销商编码：<b>{dealer_code}</b> · 客户簇编码数：{len(bucket_codes)}</div>
-          <div class="cover-meta">生成日期：{report_date} · 数据口径：新家园进货销售表（可用金额=库存）</div>
+          <div class="cover-sub">经销商编码：{dealer_code} &nbsp;|&nbsp; 客户簇编码数：{len(bucket_codes)}</div>
+          <div class="cover-meta">生成日期：{report_date} &nbsp;·&nbsp; 数据口径：新家园进货销售表（可用金额=库存）</div>
           <div class="cover-badges">
-            <span class="badge">库存：{_fmt_money(inv_sum)}</span>
-            <span class="badge">销售：{_fmt_money(sale_sum)}</span>
-            <span class="badge">负库存行：{neg_rows}</span>
+            <span class="badge">库存额 &nbsp;{_fmt_money(inv_sum)}</span>
+            <span class="badge">销售额 &nbsp;{_fmt_money(sale_sum)}</span>
+            <span class="badge">负库存行 &nbsp;{neg_rows}</span>
           </div>
         </section>
         """
@@ -581,49 +581,169 @@ def build_dealer_report_html(
   <title>{dealer_name}（{dealer_code}）经销商白皮书</title>
   <style>
     :root{{
-      --bg:#0b1220; --paper:#ffffff; --text:#111827; --muted:#6b7280;
-      --line:#e5e7eb; --accent:#ef4444; --blue:#3b82f6; --green:#10b981;
+      --navy:#1a3a5c; --navy-d:#122840; --navy-l:#234b73;
+      --orange:#f59e0b; --blue:#0ea5e9; --green:#10b981; --red:#ef4444;
+      --bg:#eef2f7; --paper:#ffffff; --text:#1e293b; --muted:#64748b;
+      --line:#e2e8f0;
     }}
-    body{{margin:0;background:#0b1220;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Microsoft YaHei',sans-serif;color:var(--text)}}
-    .wrap{{max-width:980px;margin:0 auto;padding:18px}}
-    .page{{background:var(--paper); border-radius:14px; padding:22px 26px; margin:14px 0; box-shadow:0 14px 40px rgba(0,0,0,.25)}}
-    .page h2{{margin:0 0 12px;font-size:18px;letter-spacing:.2px}}
+    *{{box-sizing:border-box}}
+    body{{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Microsoft YaHei','PingFang SC',sans-serif;color:var(--text);font-size:14px;line-height:1.6}}
+    .wrap{{max-width:960px;margin:0 auto;padding:28px 16px}}
+
+    /* ── Page card ── */
+    .page{{
+      background:var(--paper);
+      border-radius:2px;
+      padding:36px 40px;
+      margin:12px 0;
+      box-shadow:0 1px 4px rgba(0,0,0,.07),0 6px 20px rgba(0,0,0,.05);
+      border-left:4px solid var(--navy);
+      position:relative;
+    }}
+    .page h2{{
+      margin:0 0 20px;
+      font-size:15px;
+      font-weight:700;
+      color:var(--navy);
+      letter-spacing:.2px;
+      padding-bottom:14px;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }}
+    .page h2::before{{
+      content:'';
+      display:inline-block;
+      width:3px;
+      height:16px;
+      background:var(--orange);
+      border-radius:2px;
+      flex-shrink:0;
+    }}
+
+    /* ── Grid ── */
+    .grid3{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}}
+    .grid2{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:16px}}
+
+    /* ── KPI Card ── */
+    .card{{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:4px;
+      padding:18px 16px 14px;
+      border-top:3px solid var(--navy);
+    }}
+    .k{{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px}}
+    .v{{font-size:26px;font-weight:800;color:var(--navy);letter-spacing:-.5px;line-height:1.1}}
+    .s{{font-size:11px;color:var(--muted);margin-top:8px}}
+
+    /* ── Utility ── */
     .muted{{color:var(--muted)}}
-    .small{{font-size:12px;line-height:1.6}}
-    .img{{width:100%;border:1px solid var(--line);border-radius:12px}}
-    .grid3{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}
-    .grid2{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
-    .card{{border:1px solid var(--line);border-radius:12px;padding:12px 12px 10px;background:#fff}}
-    .k{{font-size:12px;color:var(--muted);margin-bottom:6px}}
-    .v{{font-size:22px;font-weight:900;letter-spacing:.2px}}
-    .s{{font-size:12px;color:var(--muted);margin-top:6px}}
-    .pill{{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);padding:7px 10px;border-radius:999px;font-size:12px;margin:8px 8px 0 0;background:#fff}}
-    .kpi-row{{margin-top:8px}}
-    .note{{margin-top:12px;border-left:4px solid #f59e0b;background:#fffbeb;padding:10px 12px;border-radius:10px;color:#92400e;line-height:1.7;font-size:13px}}
-    .tbl{{width:100%;border-collapse:collapse;border:1px solid var(--line);border-radius:12px;overflow:hidden}}
-    .tbl th,.tbl td{{border-bottom:1px solid var(--line);padding:9px 10px;font-size:12.5px;vertical-align:top}}
-    .tbl th{{background:#f8fafc;text-align:left;color:#334155}}
+    .small{{font-size:12px;line-height:1.75}}
+
+    /* ── Embedded chart ── */
+    .img{{width:100%;border:1px solid var(--line);border-radius:4px;display:block;margin-bottom:16px}}
+
+    /* ── Stat pills ── */
+    .pill{{
+      display:inline-flex;align-items:center;gap:6px;
+      border:1px solid var(--line);
+      padding:5px 14px;
+      border-radius:999px;
+      font-size:12px;font-weight:600;
+      margin:8px 6px 0 0;
+      background:#fff;
+      color:var(--navy);
+    }}
+    .kpi-row{{margin-top:10px}}
+
+    /* ── Callout / note ── */
+    .note{{
+      margin-top:16px;
+      border-left:4px solid var(--orange);
+      background:#fffbeb;
+      padding:12px 16px;
+      border-radius:0 4px 4px 0;
+      color:#78350f;
+      line-height:1.8;
+      font-size:13px;
+    }}
+
+    /* ── Table ── */
+    .tbl{{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:12px}}
+    .tbl thead tr{{background:var(--navy);color:#fff}}
+    .tbl th{{padding:10px 12px;text-align:left;font-weight:600;font-size:11.5px;letter-spacing:.3px}}
+    .tbl td{{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}}
+    .tbl tbody tr:nth-child(even){{background:#f8fafc}}
+    .tbl tbody tr:hover{{background:#eff6ff}}
     .tbl tr:last-child td{{border-bottom:none}}
-    .ul{{margin:6px 0 0 18px;line-height:1.75}}
-    .ol{{margin:6px 0 0 18px;line-height:1.75}}
-    /* cover */
-    .cover{{position:relative;overflow:hidden}}
-    .cover:before{{content:'';position:absolute;inset:-50px -50px auto auto;width:240px;height:240px;background:radial-gradient(circle at 40% 40%,rgba(239,68,68,.35),transparent 60%)}}
-    .cover-top{{font-size:12px;color:#ef4444;font-weight:900;letter-spacing:.8px}}
-    .cover-title{{margin-top:14px;font-size:34px;font-weight:1000;line-height:1.15}}
-    .cover-sub{{margin-top:10px;color:#475569}}
-    .cover-meta{{margin-top:8px;color:#64748b;font-size:12px}}
-    .cover-badges{{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}}
-    .badge{{background:linear-gradient(135deg,#fff1f2,#ffe4e6);border:1px solid #fecdd3;color:#9f1239;padding:8px 10px;border-radius:999px;font-weight:800;font-size:12px}}
-    @media (max-width: 860px){{
+
+    /* ── Lists ── */
+    .ul{{margin:8px 0 0 20px;line-height:1.9}}
+    .ol{{margin:8px 0 0 20px;line-height:1.9}}
+    .ul li,.ol li{{margin-bottom:2px}}
+
+    /* ── Cover page ── */
+    .cover{{
+      background:linear-gradient(140deg,var(--navy-d) 0%,var(--navy) 50%,var(--navy-l) 100%);
+      color:#fff;
+      border-left:none;
+      padding:52px 48px 44px;
+      min-height:320px;
+      overflow:hidden;
+    }}
+    .cover::before{{
+      content:'';position:absolute;top:-100px;right:-80px;
+      width:320px;height:320px;
+      background:radial-gradient(circle,rgba(245,158,11,.22) 0%,transparent 65%);
+      border-radius:50%;
+    }}
+    .cover::after{{
+      content:'';position:absolute;bottom:-80px;left:35%;
+      width:220px;height:220px;
+      background:radial-gradient(circle,rgba(14,165,233,.18) 0%,transparent 65%);
+      border-radius:50%;
+    }}
+    .cover-top{{
+      font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;
+      color:var(--orange);margin-bottom:20px;
+      position:relative;
+    }}
+    .cover-title{{
+      font-size:38px;font-weight:800;line-height:1.15;
+      margin:0 0 14px;letter-spacing:-.5px;
+      position:relative;
+    }}
+    .cover-sub{{color:rgba(255,255,255,.75);font-size:14px;margin-bottom:6px;position:relative}}
+    .cover-meta{{color:rgba(255,255,255,.45);font-size:12px;position:relative}}
+    .cover-badges{{margin-top:30px;display:flex;gap:12px;flex-wrap:wrap;position:relative}}
+    .badge{{
+      background:rgba(255,255,255,.1);
+      border:1px solid rgba(255,255,255,.22);
+      color:#fff;
+      padding:8px 18px;
+      border-radius:2px;
+      font-weight:700;font-size:13px;
+      letter-spacing:.2px;
+    }}
+
+    /* ── Responsive ── */
+    @media (max-width:860px){{
       .grid3{{grid-template-columns:1fr}}
       .grid2{{grid-template-columns:1fr}}
+      .cover{{padding:36px 28px 32px}}
+      .page{{padding:24px 20px}}
+      .cover-title{{font-size:28px}}
     }}
-    @media print {{
+
+    /* ── Print ── */
+    @media print{{
       body{{background:#fff}}
       .wrap{{max-width:none;padding:0}}
-      .page{{box-shadow:none;border-radius:0;margin:0;page-break-after:always}}
+      .page{{box-shadow:none;border-radius:0;margin:0;page-break-after:always;border-left:4px solid var(--navy)}}
       .page:last-child{{page-break-after:auto}}
+      .cover{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
     }}
   </style>
 </head>
