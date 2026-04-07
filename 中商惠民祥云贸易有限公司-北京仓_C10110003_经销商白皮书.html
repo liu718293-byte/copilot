@@ -158,68 +158,70 @@
         </section>
         
 
-        <section class="page">
-          <h2>06 · 分销覆盖与门店活跃（若有 DSR 能力数据）</h2>
-          <div class="grid3">
-            <div class="card"><div class="k">整体网点数</div><div class="v">—</div></div>
-            <div class="card"><div class="k">活跃网点</div><div class="v">—</div></div>
-            <div class="card"><div class="k">KOC 网点数</div><div class="v">—</div></div>
-          </div>
-          <div class="grid3">
-            <div class="card"><div class="k">KOC 销售额</div><div class="v">—</div></div>
-            <div class="card"><div class="k">拜访门店数</div><div class="v">—</div></div>
-            <div class="card"><div class="k">拜访成交率</div><div class="v">—</div></div>
-          </div>
-          <div class="small muted">说明：若该页均为 “—”，表示当前仓库的 DSR 能力表无法与该经销商编码对齐或数据缺失。</div>
-        </section>
         
-
-        <section class="page">
-          <h2>07 · 经营评分与等级（若有 PTS 计分卡）</h2>
-          <div class="grid3">
-            <div class="card"><div class="k">客户等级</div><div class="v">—</div></div>
-            <div class="card"><div class="k">季度得分</div><div class="v">—</div></div>
-            <div class="card"><div class="k">季度排名</div><div class="v">—</div></div>
-          </div>
-          <div class="grid2">
-            <div class="card"><div class="k">归属客户经理</div><div class="v">—</div></div>
-            <div class="card"><div class="k">地区</div><div class="v">— </div></div>
-          </div>
-          <div class="small muted">说明：PTS 的字段取决于表结构，若该页为空需要提供“经销商编码/名称”可对齐字段。</div>
-        </section>
-        
-
-        <section class="page">
-          <h2>08 · 行业对标（参考调研报告框架）</h2>
-          <div class="card">
-            <div class="k">当前可对标的维度</div>
-            <ul class="ul">
-              <li><b>库存结构</b>：品类集中度、TOP 品类占比、负库存异常。</li>
-              <li><b>动销与库销</b>：库存/销售关系、停滞风险识别。</li>
-              <li><b>覆盖与活跃</b>：网点覆盖、KOC 渗透、拜访与成交（需 DSR 数据对齐）。</li>
-            </ul>
-          </div>
-          <div class="card">
-            <div class="k">仍缺失的关键指标（需要新增数据源）</div>
-            <ul class="ul">
-              <li>毛利/净利、费用结构、人效、现金流、应收账款与逾期。</li>
-              <li>渠道结构（传统/现代/量贩/即时零售等）与渠道贡献。</li>
-              <li>库存周转天数、动销天数（需期初/期末或出入库口径）。</li>
-            </ul>
-          </div>
-        </section>
-        
-
-            <section class="page">
-              <h2>09 · 本周必做清单</h2>
-              <ul class="ul"><li>锁定 TOP3 品类与 TOP10 系列</li><li>对停滞/高库销比系列制定去化动作</li><li>负库存先核口径再下结论</li></ul>
-            </section>
+    
+    <section class="page">
+      <h2>06 · 分销覆盖与网点能力</h2>
+      <div class="grid3">
+        <div class="card"><div class="k">整体网点数</div><div class="v">—</div><div class="s"></div></div>
+        <div class="card"><div class="k">KOC 网点数</div><div class="v">—</div><div class="s">KOC 销售额 —</div></div>
+        <div class="card"><div class="k">市场覆盖率</div><div class="v">—</div><div class="s">市场容量 —</div></div>
+      </div>
+      <div class="grid3">
+        <div class="card"><div class="k">品牌分销指数</div><div class="v">—</div><div class="s">越高品牌铺货越广</div></div>
+        <div class="card"><div class="k">复用指数</div><div class="v">—</div><div class="s">跨品类复用门店能力</div></div>
+        <div class="card"><div class="k">经销商分销能力</div><div class="v">—</div><div class="s">综合分销能力评分</div></div>
+      </div>
+      
+      <div class="small muted">说明：网点数来自经销商分销能力表；覆盖率 = 整体网点数 / 市场容量 × 100%。</div>
+    </section>
+    <section class="page">
+      <h2>07 · 终端门店质量分布</h2>
+      <div class='note'>终端等级数据缺失（经销商分销能力表无对应编码）。</div>
+      
+      <div class="small muted" style="margin-top:12px">金标→银标→铜标→基础→不达标；提升路径：不达标→基础→铜标优先，KOC 门店着重保金/银。</div>
+    </section>
+    <section class="page">
+      <h2>08 · PTS 经营评分与等级</h2>
+      <div class="grid3">
+        <div class="card"><div class="k">客户等级</div><div class="v">—</div><div class="s">经销商分级</div></div>
+        <div class="card"><div class="k">当月得分</div><div class="v">—</div><div class="s">最新月度评分</div></div>
+        <div class="card"><div class="k">季度得分</div><div class="v">—</div><div class="s">季度排名 #—</div></div>
+      </div>
+      <div class="grid3">
+        <div class="card"><div class="k">年度得分</div><div class="v">—</div><div class="s">年度排名 #—</div></div>
+        <div class="card"><div class="k">客户经理</div><div class="v" style="font-size:18px">—</div><div class="s">编码 —</div></div>
+        <div class="card"><div class="k">所属区域</div><div class="v" style="font-size:18px">—</div><div class="s">—</div></div>
+      </div>
+      <div class="small muted">数据来源：经销商PTS计分卡。季度/年度排名越小越靠前。</div>
+    </section>
+    <section class="page">
+      <h2>09 · DSR 分销员执行力明细</h2>
+      <div class="grid3">
+        <div class="card"><div class="k">拜访门店数</div><div class="v">—</div></div>
+        <div class="card"><div class="k">拜访成交门店</div><div class="v">—</div></div>
+        <div class="card"><div class="k">拜访成交率</div><div class="v">—</div></div>
+      </div>
+      <div class="note">DSR 明细数据暂无（编码未对齐）。</div>
+      <div class="small muted" style="margin-top:12px">目标拜访成交率 &gt; 60%；数据来源：DSR分销能力表。</div>
+    </section>
+    <section class="page">
+      <h2>10 · 区域背景与城市经理对标</h2>
+      <div class="grid3">
+        <div class="card"><div class="k">所属区域</div><div class="v" style="font-size:18px">—</div><div class="s">城市经理：—</div></div>
+        <div class="card"><div class="k">区域整体网点</div><div class="v">—</div><div class="s">区域 KOC 网点 —</div></div>
+        <div class="card"><div class="k">区域覆盖率</div><div class="v">—</div><div class="s">区域分销能力 —</div></div>
+      </div>
+      <div class="note">
+        <b>对标方向：</b>对比本经销商（覆盖率 —，分销能力 —）与区域城市经理汇总数据，识别该经销商在区域中的能力水位。覆盖率/分销能力明显低于区域时，优先做网点开发与 KOC 渗透。
+      </div>
+    </section>
+    
+    
+    
             
 
-            <section class="page">
-              <h2>10 · 进货闸门与补货策略</h2>
-              <ul class="ul"><li>积压品类：先去化再补货</li><li>畅销品类：补货小步快跑</li><li>新品：试销-复盘-再铺货</li></ul>
-            </section>
+            
             
 
             <section class="page">

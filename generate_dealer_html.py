@@ -3,7 +3,7 @@
 """
 经销商经营状况白皮书（HTML）生成器
 
-目标：参考行业调研报告的表达方式，但用公司现有数据输出 15–20 个“分页段落”的经销商单页 HTML。
+目标：参考行业调研报告的表达方式，但用公司现有数据输出 15–20 个"分页段落"的经销商单页 HTML。
 
 输入（默认）：
 - xfx_inventory_tool/新家园进货销售*.xlsx（可用金额=库存）
@@ -83,7 +83,7 @@ def _load_inventory_detail() -> pd.DataFrame:
     raw = pd.read_excel(path, sheet_name=0, engine="openpyxl")
     raw = normalize_columns(raw)
     detail = prepare_direct_available_inventory(raw, source_file=path.name)
-    # 尽量补一个“经销商编码”列（如果原始表有）
+    # 尽量补一个"经销商编码"列（如果原始表有）
     # 注：prepare_direct_available_inventory 会把经销商编码拼进 商品编码，故这里从 raw 再取一次更稳
     code_col = next((c for c in ["经销商编码", "客户编码", "编码"] if c in raw.columns), None)
     if code_col and code_col in raw.columns:
@@ -117,21 +117,50 @@ def _pick_latest_xlsx(prefix: str, folder: Path) -> Path | None:
 
 
 def _load_pts() -> pd.DataFrame:
-    p = _pick_latest_xlsx("经销商PTS计分卡", ROOT / "baipishu" / "data")
-    if not p:
-        return pd.DataFrame()
-    return pd.read_excel(p, sheet_name=0, engine="openpyxl").fillna("")
+    # 优先从脚本同目录查找，兼容旧路径
+    for search_dir in [Path(__file__).resolve().parent, ROOT / "baipishu" / "data"]:
+        p = _pick_latest_xlsx("经销商PTS计分卡", search_dir)
+        if p:
+            return pd.read_excel(p, sheet_name=0, engine="openpyxl").fillna("")
+    return pd.DataFrame()
 
 
 def _load_dsr() -> pd.DataFrame:
-    p = _pick_latest_xlsx("DSR分销能力", ROOT / "baipishu" / "data")
-    if not p:
-        return pd.DataFrame()
-    return pd.read_excel(p, sheet_name=0, engine="openpyxl").fillna("")
+    for search_dir in [Path(__file__).resolve().parent, ROOT / "baipishu" / "data"]:
+        p = _pick_latest_xlsx("DSR分销能力", search_dir)
+        if p:
+            return pd.read_excel(p, sheet_name=0, engine="openpyxl").fillna("")
+    return pd.DataFrame()
+
+
+def _load_dealer_dist() -> pd.DataFrame:
+    """经销商分销能力：经销商级别的网点/KOC/终端等级/品牌分销数据。"""
+    for search_dir in [Path(__file__).resolve().parent, ROOT / "baipishu" / "data"]:
+        p = _pick_latest_xlsx("经销商分销能力", search_dir)
+        if p:
+            df = pd.read_excel(p, sheet_name=0, engine="openpyxl").fillna(0)
+            for c in ["经销商编码", "经销商名称", "大区", "区域", "城市", "客户经理工号", "客户经理名称", "经销商等级"]:
+                if c in df.columns:
+                    df[c] = df[c].astype(str).str.strip()
+            return df
+    return pd.DataFrame()
+
+
+def _load_city_mgr() -> pd.DataFrame:
+    """城市经理分销能力：城市经理维度的对标数据（用于区域背景展示）。"""
+    for search_dir in [Path(__file__).resolve().parent, ROOT / "baipishu" / "data"]:
+        p = _pick_latest_xlsx("城市经理分销能力", search_dir)
+        if p:
+            df = pd.read_excel(p, sheet_name=0, engine="openpyxl").fillna(0)
+            for c in ["大区", "区域", "城市经理工号", "城市经理名称"]:
+                if c in df.columns:
+                    df[c] = df[c].astype(str).str.strip()
+            return df
+    return pd.DataFrame()
 
 
 def _dealer_bucket_codes(dealer_df: pd.DataFrame, dealer_code: str) -> list[str]:
-    """同一主客户簇下的所有客户编码（用于把主/关联户的数据合并到“该经销商报告”）。"""
+    """同一主客户簇下的所有客户编码（用于把主/关联户的数据合并到"该经销商报告"）。"""
     if dealer_df is None or dealer_df.empty:
         return [dealer_code]
     if "客户编码" not in dealer_df.columns or "主客户编码" not in dealer_df.columns:
@@ -191,9 +220,11 @@ def build_dealer_report_html(
     inv_all_agg: pd.DataFrame,
     pts_df: pd.DataFrame,
     dsr_df: pd.DataFrame,
+    dealer_dist_df: pd.DataFrame,
+    city_mgr_df: pd.DataFrame,
     dealer_master: pd.DataFrame,
 ) -> str:
-    # 过滤明细（按经销商编码“簇”）
+    # 过滤明细（按经销商编码"簇"）
     dc_set = {str(x).strip().upper() for x in bucket_codes if str(x).strip()}
     sub = inv_detail.copy()
     if "经销商编码" in sub.columns and dc_set:
@@ -278,11 +309,10 @@ def build_dealer_report_html(
     else:
         top_sku_rows_html = '<tr><td colspan="7" class="muted">无数据</td></tr>'
 
-    # PTS（可选）
+    # ── PTS 计分卡 ──
     pts_info = {}
     if not pts_df.empty:
-        # 尝试按 经销商编码/名称对齐
-        cand_cols = [c for c in ["经销商编码", "客户编码", "客户编号", "经销商编号", "经销商名称", "客户名称"] if c in pts_df.columns]
+        cand_cols = [c for c in ["经销商编码", "客户编码", "客户编号", "经销商编号"] if c in pts_df.columns]
         hit = pd.DataFrame()
         for c in cand_cols:
             s = pts_df[c].astype(str).str.strip().str.upper()
@@ -293,74 +323,145 @@ def build_dealer_report_html(
             hit = pts_df[pts_df["经销商名称"].astype(str).str.strip() == dealer_name]
         if not hit.empty:
             r = hit.iloc[0].to_dict()
-            for k in ["客户等级", "季度得分", "季度排名", "省", "市", "客户经理编码", "客户经理工号", "客户经理名称"]:
-                if k in r:
-                    pts_info[k] = r.get(k)
+            for k in ["客户等级", "当月得分", "季度得分", "季度排名", "年度得分", "年度排名",
+                      "大区", "区域", "城市", "客户经理编码", "客户经理姓名", "主客户编码", "主客户名称"]:
+                if k in r and r[k] not in ("", None, 0, "0"):
+                    pts_info[k] = r[k]
 
-    # DSR（可选，按经销商编码聚合）
-    dsr_info = {}
+    # ── DSR 分销能力（按经销商编码聚合多个DSR行）──
+    dsr_info: dict = {}
+    dsr_rows: pd.DataFrame = pd.DataFrame()
     if not dsr_df.empty:
-        code_cols = [c for c in ["经销商编码", "客户编码", "经销商编号", "客户编号"] if c in dsr_df.columns]
-        hit = pd.DataFrame()
+        code_cols = [c for c in ["经销商编码", "客户编码"] if c in dsr_df.columns]
         for c in code_cols:
             s = dsr_df[c].astype(str).str.strip().str.upper()
             if dealer_code and (s == dealer_code.upper()).any():
-                hit = dsr_df[s == dealer_code.upper()]
+                dsr_rows = dsr_df[s == dealer_code.upper()].copy()
                 break
+        if not dsr_rows.empty:
+            num_cols = ["整体网点数", "活跃网点", "KOC网点数", "KOC销售额",
+                        "拜访门店数", "拜访成交门店数", "分销门店", "销售额"]
+            for col in num_cols:
+                if col in dsr_rows.columns:
+                    dsr_info[col] = float(pd.to_numeric(dsr_rows[col], errors="coerce").fillna(0).sum())
+            # 拜访成交率：加权平均
+            if "拜访成交率" in dsr_rows.columns:
+                v = pd.to_numeric(dsr_rows["拜访成交率"], errors="coerce").mean()
+                dsr_info["拜访成交率"] = float(v) if pd.notna(v) else None
+            if "覆盖率" in dsr_rows.columns:
+                v = pd.to_numeric(dsr_rows["覆盖率"], errors="coerce").sum()
+                dsr_info["覆盖率"] = float(v) if pd.notna(v) else None
+
+    # ── 经销商分销能力（dealer_dist_df）──
+    dist_info: dict = {}
+    if not dealer_dist_df.empty:
+        code_cols = [c for c in ["经销商编码"] if c in dealer_dist_df.columns]
+        hit = pd.DataFrame()
+        for c in code_cols:
+            s = dealer_dist_df[c].astype(str).str.strip().str.upper()
+            if dealer_code and (s == dealer_code.upper()).any():
+                hit = dealer_dist_df[s == dealer_code.upper()]
+                break
+        if hit.empty and dealer_name and "经销商名称" in dealer_dist_df.columns:
+            hit = dealer_dist_df[dealer_dist_df["经销商名称"].astype(str).str.strip() == dealer_name]
         if not hit.empty:
-            # 聚合
-            cols_try = {
-                "整体网点数": ["整体网点数", "网点总数", "门店数"],
-                "活跃网点": ["活跃网点", "活跃网点数"],
-                "KOC网点数": ["KOC网点数", "KOC门店数"],
-                "KOC销售额": ["KOC销售额", "KOC销量", "KOC销售"],
-                "拜访门店数": ["拜访门店数", "拜访门店", "拜访数"],
-                "拜访成交率": ["拜访成交率", "成交率"],
-                "覆盖率": ["覆盖率", "覆盖率(%)"],
-            }
+            r = hit.iloc[0]
+            scalar_fields = [
+                "经销商等级", "整体网点数", "KOC网点数", "KOC销售额",
+                "市场容量", "覆盖率(%)", "活跃网点", "品牌分销指数", "复用指数", "经销商分销能力",
+                "本月金标店数", "本月银标店数", "本月铜标店数", "本月基础店数", "本月不达标数",
+                "南孚网点数", "丰蓝网点数", "益圆网点数", "传应网点数",
+                "KOC-火机品类网点数", "KOC-辣味零食品类网点数", "KOC-爆珠网点数", "KOC-剃须刀品类网点数",
+                "大区", "区域", "城市", "客户经理名称",
+            ]
+            for f in scalar_fields:
+                if f in r.index and r[f] not in ("", None):
+                    dist_info[f] = r[f]
 
-            def pick_first(keys):
-                for k in keys:
-                    if k in hit.columns:
-                        return k
-                return None
+    # ── 城市经理对标（取该经销商所在区域的城市经理行，用于背景展示）──
+    cm_info: dict = {}
+    if not city_mgr_df.empty and (dist_info.get("区域") or pts_info.get("区域")):
+        target_region = str(dist_info.get("区域") or pts_info.get("区域", "")).strip()
+        if target_region and "区域" in city_mgr_df.columns:
+            cm_rows = city_mgr_df[city_mgr_df["区域"].astype(str).str.strip() == target_region]
+            if not cm_rows.empty:
+                cm_r = cm_rows.iloc[0]
+                for f in ["城市经理名称", "整体网点数", "KOC网点数", "KOC销售额", "覆盖率(%)", "分销能力", "市场容量"]:
+                    if f in cm_r.index:
+                        cm_info[f] = cm_r[f]
 
-            agg = {}
-            for out_k, cands in cols_try.items():
-                col = pick_first(cands)
-                if not col:
-                    continue
-                v = pd.to_numeric(hit[col], errors="coerce").fillna(0).sum()
-                agg[out_k] = float(v)
-            dsr_info = agg
-
-    # 画图（Matplotlib）
+    # ── Matplotlib 图表 ──
     import matplotlib
-
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-
     plt.rcParams.update({"font.sans-serif": ["SimHei", "Microsoft YaHei", "STHeiti"], "axes.unicode_minus": False})
 
-    # 图1：品类库存 TOP
+    # 图1：品类库存 TOP10
     fig1 = plt.figure(figsize=(7.2, 3.2))
     ax = fig1.add_subplot(111)
     if not cat.empty:
-        ax.barh(cat["品类"].astype(str).iloc[::-1], cat["库存额"].astype(float).iloc[::-1], color="#ef4444")
+        ax.barh(cat["品类"].astype(str).iloc[::-1], cat["库存额"].astype(float).iloc[::-1], color="#1a3a5c")
         ax.set_title("品类库存 TOP10（库存额=可用金额）", fontsize=11)
+        ax.tick_params(labelsize=9)
     else:
         ax.text(0.5, 0.5, "无可用品类数据", ha="center", va="center")
         ax.axis("off")
+    fig1.tight_layout()
     img_cat = _b64_png(fig1)
     plt.close(fig1)
 
     # 图2：进销存概览
     fig2 = plt.figure(figsize=(7.2, 2.8))
     ax2 = fig2.add_subplot(111)
-    ax2.bar(["进货额", "销售额(出厂)", "库存额"], [in_sum, sale_sum, inv_sum], color=["#3b82f6", "#10b981", "#ef4444"])
+    ax2.bar(["进货额", "销售额(出厂)", "库存额"], [in_sum, sale_sum, inv_sum],
+            color=["#3b82f6", "#10b981", "#1a3a5c"])
     ax2.set_title("进销存概览（当期汇总）", fontsize=11)
+    ax2.tick_params(labelsize=9)
+    fig2.tight_layout()
     img_kpi = _b64_png(fig2)
     plt.close(fig2)
+
+    # 图3：终端等级分布（来自经销商分销能力）
+    img_grade = ""
+    grade_vals = {
+        "金标": float(dist_info.get("本月金标店数", 0) or 0),
+        "银标": float(dist_info.get("本月银标店数", 0) or 0),
+        "铜标": float(dist_info.get("本月铜标店数", 0) or 0),
+        "基础": float(dist_info.get("本月基础店数", 0) or 0),
+        "不达标": float(dist_info.get("本月不达标数", 0) or 0),
+    }
+    total_grade = sum(grade_vals.values())
+    if total_grade > 0:
+        fig3, ax3 = plt.subplots(figsize=(5.5, 3.0))
+        colors = ["#f59e0b", "#94a3b8", "#b45309", "#64748b", "#ef4444"]
+        bars = ax3.bar(list(grade_vals.keys()), list(grade_vals.values()), color=colors)
+        ax3.set_title("终端门店等级分布", fontsize=11)
+        ax3.tick_params(labelsize=9)
+        for bar, v in zip(bars, grade_vals.values()):
+            if v > 0:
+                ax3.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,
+                         f"{int(v)}", ha="center", va="bottom", fontsize=9)
+        fig3.tight_layout()
+        img_grade = _b64_png(fig3)
+        plt.close(fig3)
+
+    # 图4：品类 KOC 网点分布
+    img_koc = ""
+    koc_brand_map = {
+        "火机": float(dist_info.get("KOC-火机品类网点数", 0) or 0),
+        "辣味零食": float(dist_info.get("KOC-辣味零食品类网点数", 0) or 0),
+        "爆珠": float(dist_info.get("KOC-爆珠网点数", 0) or 0),
+        "剃须刀": float(dist_info.get("KOC-剃须刀品类网点数", 0) or 0),
+    }
+    koc_brand_map = {k: v for k, v in koc_brand_map.items() if v > 0}
+    if koc_brand_map:
+        fig4, ax4 = plt.subplots(figsize=(5.5, 3.0))
+        ax4.barh(list(koc_brand_map.keys()), list(koc_brand_map.values()), color="#0ea5e9")
+        ax4.set_title("品类 KOC 网点数", fontsize=11)
+        ax4.tick_params(labelsize=9)
+        fig4.tight_layout()
+        img_koc = _b64_png(fig4)
+        plt.close(fig4)
 
     # 报告日期
     report_date = datetime.now().strftime("%Y-%m-%d")
@@ -368,33 +469,56 @@ def build_dealer_report_html(
     # 15-20 个分页段落（打印时每段一页）
     pages = []
 
+    _dealer_grade = dist_info.get("经销商等级") or pts_info.get("客户等级") or "—"
+    _region = dist_info.get("区域") or pts_info.get("区域") or "—"
+    _city = dist_info.get("城市") or pts_info.get("城市") or ""
+    _km = dist_info.get("客户经理名称") or pts_info.get("客户经理姓名") or "—"
+
     pages.append(
         f"""
         <section class="page cover">
           <div class="cover-top">经销商经营状况白皮书 &nbsp;·&nbsp; 2025</div>
           <div class="cover-title">{dealer_name or "—"}</div>
-          <div class="cover-sub">经销商编码：{dealer_code} &nbsp;|&nbsp; 客户簇编码数：{len(bucket_codes)}</div>
-          <div class="cover-meta">生成日期：{report_date} &nbsp;·&nbsp; 数据口径：新家园进货销售表（可用金额=库存）</div>
+          <div class="cover-sub">
+            {_region}{" · " + _city if _city and _city != "—" else ""} &nbsp;|&nbsp;
+            编码：{dealer_code} &nbsp;|&nbsp; 等级：{_dealer_grade} &nbsp;|&nbsp; 客户经理：{_km}
+          </div>
+          <div class="cover-meta">生成日期：{report_date} &nbsp;·&nbsp; 数据来源：进货销售表 / 经销商分销能力 / PTS计分卡 / DSR分销能力</div>
           <div class="cover-badges">
             <span class="badge">库存额 &nbsp;{_fmt_money(inv_sum)}</span>
             <span class="badge">销售额 &nbsp;{_fmt_money(sale_sum)}</span>
-            <span class="badge">负库存行 &nbsp;{neg_rows}</span>
+            <span class="badge">整体网点 &nbsp;{_fmt_money(dist_info.get("整体网点数") or dsr_info.get("整体网点数"))}</span>
+            <span class="badge">KOC网点 &nbsp;{_fmt_money(dist_info.get("KOC网点数") or dsr_info.get("KOC网点数"))}</span>
           </div>
         </section>
         """
     )
+
+    _pts_monthly = pts_info.get("当月得分", "—")
+    _pts_quarter = pts_info.get("季度得分", "—")
+    _pts_q_rank = pts_info.get("季度排名", "—")
+    _pts_annual = pts_info.get("年度得分", "—")
+    _pts_a_rank = pts_info.get("年度排名", "—")
+    _dist_ability = dist_info.get("经销商分销能力", "—")
+    _coverage = dist_info.get("覆盖率(%)", "—")
+    _coverage_str = f"{float(_coverage):.1f}%" if _coverage not in ("—", None, 0, "") else "—"
 
     pages.append(
         f"""
         <section class="page">
           <h2>01 · 结论摘要（Executive Summary）</h2>
           <div class="grid3">
-            <div class="card"><div class="k">库存合计</div><div class="v">{_fmt_money(inv_sum)}</div><div class="s">分位：{_pct(pct_inv)}</div></div>
-            <div class="card"><div class="k">销售额（出厂）</div><div class="v">{_fmt_money(sale_sum)}</div><div class="s">分位：{_pct(pct_sale)}</div></div>
-            <div class="card"><div class="k">库销比</div><div class="v">{(f'{turnover_ratio:.1f}x' if turnover_ratio is not None else '—')}</div><div class="s">销售=0 时不计算</div></div>
+            <div class="card"><div class="k">库存合计</div><div class="v">{_fmt_money(inv_sum)}</div><div class="s">全体分位：{_pct(pct_inv)}</div></div>
+            <div class="card"><div class="k">销售额（出厂）</div><div class="v">{_fmt_money(sale_sum)}</div><div class="s">全体分位：{_pct(pct_sale)}</div></div>
+            <div class="card"><div class="k">库销比</div><div class="v">{(f"{turnover_ratio:.1f}x" if turnover_ratio is not None else "—")}</div><div class="s">销售=0 时不计算</div></div>
+          </div>
+          <div class="grid3">
+            <div class="card"><div class="k">PTS 季度得分</div><div class="v">{_pts_quarter}</div><div class="s">季度排名 #{_pts_q_rank} &nbsp;|&nbsp; 当月 {_pts_monthly}</div></div>
+            <div class="card"><div class="k">分销能力指数</div><div class="v">{_dist_ability}</div><div class="s">市场覆盖率 {_coverage_str}</div></div>
+            <div class="card"><div class="k">整体网点数</div><div class="v">{_fmt_money(dist_info.get("整体网点数") or dsr_info.get("整体网点数"))}</div><div class="s">活跃网点 {_fmt_money(dist_info.get("活跃网点") or dsr_info.get("活跃网点"))}</div></div>
           </div>
           <div class="note">
-            <b>解读建议：</b>库存高且库销比高 → 积压风险；负库存行多 → 口径/时点/重复进表需核；品类集中度高 → 重点品类控进货与去化动作更有效。
+            <b>解读建议：</b>库销比高 → 积压风险优先去化；分销能力低 → 聚焦网点质量与 KOC 渗透；PTS 排名滞后 → 核对拜访得分与规模系数短板。
           </div>
         </section>
         """
@@ -440,7 +564,7 @@ def build_dealer_report_html(
               {top_sku_rows_html}
             </tbody>
           </table>
-          <div class="small muted">提示：优先关注“库存额高且销售低”的系列；若出现大量负库存，请先核对规则起算日/重复进表/冲减口径。</div>
+          <div class="small muted">提示：优先关注"库存额高且销售低"的系列；若出现大量负库存，请先核对规则起算日/重复进表/冲减口径。</div>
         </section>
         """
     )
@@ -468,15 +592,15 @@ def build_dealer_report_html(
             <div class="card">
               <div class="k">动作建议（本周）</div>
               <ol class="ol">
-                <li>按库存额排序锁定 TOP3 品类与 TOP10 系列；对“库存高/销售低”做去化动作。</li>
+                <li>按库存额排序锁定 TOP3 品类与 TOP10 系列；对"库存高/销售低"做去化动作。</li>
                 <li>对库销比高的品类设置进货闸门，优先消化库存再补货。</li>
-                <li>若负库存行多：先核“起算日/重复进表/冲减”，再谈补货或去化。</li>
+                <li>若负库存行多：先核"起算日/重复进表/冲减"，再谈补货或去化。</li>
               </ol>
             </div>
             <div class="card">
               <div class="k">动作建议（本月）</div>
               <ol class="ol">
-                <li>建立“品类-系列”周度复盘：金额、动销、异常行、责任人、截止日期。</li>
+                <li>建立"品类-系列"周度复盘：金额、动销、异常行、责任人、截止日期。</li>
                 <li>对重点品类做陈列/促销资源申请并跟踪验收。</li>
                 <li>把库存与动销指标纳入经销商月度例会，形成闭环。</li>
               </ol>
@@ -486,80 +610,149 @@ def build_dealer_report_html(
         """
     )
 
-    # 能力（DSR）页
+    # 页06：经销商分销能力（核心新页）
+    _active_rate = ""
+    _total_net = float(dist_info.get("整体网点数") or 0)
+    _active_net = float(dist_info.get("活跃网点") or 0)
+    if _total_net > 0 and _active_net > 0:
+        _active_rate = f"活跃率 {_active_net/_total_net*100:.0f}%"
+    _brand_idx = dist_info.get("品牌分销指数", "—")
+    _reuse_idx = dist_info.get("复用指数", "—")
+    _dist_cap = dist_info.get("经销商分销能力", "—")
+    _mkt_cap = dist_info.get("市场容量", "—")
+    _koc_sales = dist_info.get("KOC销售额") or dsr_info.get("KOC销售额")
     pages.append(
         f"""
         <section class="page">
-          <h2>06 · 分销覆盖与门店活跃（若有 DSR 能力数据）</h2>
+          <h2>06 · 分销覆盖与网点能力</h2>
           <div class="grid3">
-            <div class="card"><div class="k">整体网点数</div><div class="v">{_fmt_money(dsr_info.get('整体网点数') if dsr_info else None)}</div></div>
-            <div class="card"><div class="k">活跃网点</div><div class="v">{_fmt_money(dsr_info.get('活跃网点') if dsr_info else None)}</div></div>
-            <div class="card"><div class="k">KOC 网点数</div><div class="v">{_fmt_money(dsr_info.get('KOC网点数') if dsr_info else None)}</div></div>
+            <div class="card"><div class="k">整体网点数</div><div class="v">{_fmt_money(_total_net or dist_info.get("整体网点数") or dsr_info.get("整体网点数"))}</div><div class="s">{_active_rate}</div></div>
+            <div class="card"><div class="k">KOC 网点数</div><div class="v">{_fmt_money(dist_info.get("KOC网点数") or dsr_info.get("KOC网点数"))}</div><div class="s">KOC 销售额 {_fmt_money(_koc_sales)}</div></div>
+            <div class="card"><div class="k">市场覆盖率</div><div class="v">{_coverage_str}</div><div class="s">市场容量 {_fmt_money(_mkt_cap)}</div></div>
           </div>
           <div class="grid3">
-            <div class="card"><div class="k">KOC 销售额</div><div class="v">{_fmt_money(dsr_info.get('KOC销售额') if dsr_info else None)}</div></div>
-            <div class="card"><div class="k">拜访门店数</div><div class="v">{_fmt_money(dsr_info.get('拜访门店数') if dsr_info else None)}</div></div>
-            <div class="card"><div class="k">拜访成交率</div><div class="v">{_fmt_money(dsr_info.get('拜访成交率') if dsr_info else None)}</div></div>
+            <div class="card"><div class="k">品牌分销指数</div><div class="v">{_brand_idx}</div><div class="s">越高品牌铺货越广</div></div>
+            <div class="card"><div class="k">复用指数</div><div class="v">{_reuse_idx}</div><div class="s">跨品类复用门店能力</div></div>
+            <div class="card"><div class="k">经销商分销能力</div><div class="v">{_dist_cap}</div><div class="s">综合分销能力评分</div></div>
           </div>
-          <div class="small muted">说明：若该页均为 “—”，表示当前仓库的 DSR 能力表无法与该经销商编码对齐或数据缺失。</div>
+          {"<img class='img' src='data:image/png;base64," + img_koc + "'/>" if img_koc else ""}
+          <div class="small muted">说明：网点数来自经销商分销能力表；覆盖率 = 整体网点数 / 市场容量 × 100%。</div>
         </section>
         """
     )
 
-    # PTS 页
+    # 页07：终端等级分布
+    _grade_html = ""
+    if total_grade > 0:
+        pcts = {k: f"{v/total_grade*100:.0f}%" for k, v in grade_vals.items()}
+        rows = "".join(
+            f"<tr><td>{k}</td><td>{int(v)}</td><td>{pcts[k]}</td></tr>"
+            for k, v in grade_vals.items()
+        )
+        _grade_html = f"""
+          <table class="tbl" style="max-width:360px">
+            <thead><tr><th>等级</th><th>门店数</th><th>占比</th></tr></thead>
+            <tbody>{rows}<tr><td><b>合计</b></td><td><b>{int(total_grade)}</b></td><td>100%</td></tr></tbody>
+          </table>"""
+
     pages.append(
         f"""
         <section class="page">
-          <h2>07 · 经营评分与等级（若有 PTS 计分卡）</h2>
-          <div class="grid3">
-            <div class="card"><div class="k">客户等级</div><div class="v">{pts_info.get('客户等级','—')}</div></div>
-            <div class="card"><div class="k">季度得分</div><div class="v">{_fmt_money(pts_info.get('季度得分'))}</div></div>
-            <div class="card"><div class="k">季度排名</div><div class="v">{pts_info.get('季度排名','—')}</div></div>
-          </div>
-          <div class="grid2">
-            <div class="card"><div class="k">归属客户经理</div><div class="v">{pts_info.get('客户经理名称') or pts_info.get('客户经理编码') or '—'}</div></div>
-            <div class="card"><div class="k">地区</div><div class="v">{(pts_info.get('省') or '—')} {(pts_info.get('市') or '')}</div></div>
-          </div>
-          <div class="small muted">说明：PTS 的字段取决于表结构，若该页为空需要提供“经销商编码/名称”可对齐字段。</div>
+          <h2>07 · 终端门店质量分布</h2>
+          {"<img class='img' src='data:image/png;base64," + img_grade + "'/>" if img_grade else "<div class='note'>终端等级数据缺失（经销商分销能力表无对应编码）。</div>"}
+          {_grade_html}
+          <div class="small muted" style="margin-top:12px">金标 → 银标 → 铜标 → 基础 → 不达标；提升路径：不达标 → 基础 → 铜标优先，KOC 门店着重保金/银。</div>
         </section>
         """
     )
 
-    # 行业对标页（文本化占位，便于后续加财务/渠道数据）
+    # 页08：PTS 经营评分
     pages.append(
-        """
+        f"""
         <section class="page">
-          <h2>08 · 行业对标（参考调研报告框架）</h2>
-          <div class="card">
-            <div class="k">当前可对标的维度</div>
-            <ul class="ul">
-              <li><b>库存结构</b>：品类集中度、TOP 品类占比、负库存异常。</li>
-              <li><b>动销与库销</b>：库存/销售关系、停滞风险识别。</li>
-              <li><b>覆盖与活跃</b>：网点覆盖、KOC 渗透、拜访与成交（需 DSR 数据对齐）。</li>
-            </ul>
+          <h2>08 · PTS 经营评分与等级</h2>
+          <div class="grid3">
+            <div class="card"><div class="k">客户等级</div><div class="v">{pts_info.get("客户等级","—")}</div><div class="s">经销商分级</div></div>
+            <div class="card"><div class="k">当月得分</div><div class="v">{_pts_monthly}</div><div class="s">最新月度评分</div></div>
+            <div class="card"><div class="k">季度得分</div><div class="v">{_pts_quarter}</div><div class="s">季度排名 #{_pts_q_rank}</div></div>
           </div>
-          <div class="card">
-            <div class="k">仍缺失的关键指标（需要新增数据源）</div>
-            <ul class="ul">
-              <li>毛利/净利、费用结构、人效、现金流、应收账款与逾期。</li>
-              <li>渠道结构（传统/现代/量贩/即时零售等）与渠道贡献。</li>
-              <li>库存周转天数、动销天数（需期初/期末或出入库口径）。</li>
-            </ul>
+          <div class="grid3">
+            <div class="card"><div class="k">年度得分</div><div class="v">{_pts_annual}</div><div class="s">年度排名 #{_pts_a_rank}</div></div>
+            <div class="card"><div class="k">客户经理</div><div class="v" style="font-size:18px">{pts_info.get("客户经理姓名","—")}</div><div class="s">编码 {pts_info.get("客户经理编码","—")}</div></div>
+            <div class="card"><div class="k">所属区域</div><div class="v" style="font-size:18px">{pts_info.get("区域","—")}</div><div class="s">{pts_info.get("城市","—")}</div></div>
+          </div>
+          <div class="small muted">说明：PTS 分数越高表示经营表现越好；季度/年度排名越小越靠前。数据来自经销商PTS计分卡。</div>
+        </section>
+        """
+    )
+
+    # 页09：DSR 分销员执行力
+    _dsr_visit_rate = ""
+    if dsr_info.get("拜访成交率"):
+        _dsr_visit_rate = f"{float(dsr_info['拜访成交率'])*100:.1f}%" if float(dsr_info['拜访成交率']) <= 1 else f"{float(dsr_info['拜访成交率']):.1f}%"
+    _dsr_rows_html = ""
+    if not dsr_rows.empty:
+        show_cols = [c for c in ["DSR名称", "整体网点数", "活跃网点", "KOC网点数", "拜访门店数", "拜访成交门店数", "销售额"] if c in dsr_rows.columns]
+        rows_html = []
+        for _, row in dsr_rows[show_cols].iterrows():
+            cells = "".join(f"<td>{row[c]}</td>" for c in show_cols)
+            rows_html.append(f"<tr>{cells}</tr>")
+        headers = "".join(f"<th>{c}</th>" for c in show_cols)
+        _dsr_rows_html = f"""
+          <table class="tbl">
+            <thead><tr>{headers}</tr></thead>
+            <tbody>{"".join(rows_html)}</tbody>
+          </table>"""
+    pages.append(
+        f"""
+        <section class="page">
+          <h2>09 · DSR 分销员执行力明细</h2>
+          <div class="grid3">
+            <div class="card"><div class="k">拜访门店数</div><div class="v">{_fmt_money(dsr_info.get("拜访门店数"))}</div></div>
+            <div class="card"><div class="k">拜访成交门店</div><div class="v">{_fmt_money(dsr_info.get("拜访成交门店数"))}</div></div>
+            <div class="card"><div class="k">拜访成交率</div><div class="v">{_dsr_visit_rate or "—"}</div></div>
+          </div>
+          {_dsr_rows_html if _dsr_rows_html else '<div class="note">DSR 明细数据暂无（编码未对齐）。</div>'}
+          <div class="small muted" style="margin-top:12px">拜访成交率 = 拜访成交门店数 / 拜访门店数；目标 > 60%。</div>
+        </section>
+        """
+    )
+
+    # 页10：区域城市经理对标
+    _cm_name = cm_info.get("城市经理名称", "—")
+    _cm_region = dist_info.get("区域") or pts_info.get("区域", "—")
+    pages.append(
+        f"""
+        <section class="page">
+          <h2>10 · 区域背景与城市经理对标</h2>
+          <div class="grid3">
+            <div class="card"><div class="k">所属区域</div><div class="v" style="font-size:18px">{_cm_region}</div><div class="s">城市经理：{_cm_name}</div></div>
+            <div class="card"><div class="k">区域整体网点</div><div class="v">{_fmt_money(cm_info.get("整体网点数"))}</div><div class="s">区域 KOC 网点 {_fmt_money(cm_info.get("KOC网点数"))}</div></div>
+            <div class="card"><div class="k">区域覆盖率</div><div class="v">{str(cm_info.get("覆盖率(%)","—")).rstrip("0").rstrip(".") + "%" if cm_info.get("覆盖率(%)") else "—"}</div><div class="s">区域分销能力 {cm_info.get("分销能力","—")}</div></div>
+          </div>
+          <div class="note">
+            <b>对标方向：</b>对比本经销商与区域城市经理汇总数据，识别该经销商在区域中的贡献占比与能力水位。覆盖率/分销能力明显低于区域均值时，优先做网点开发与 KOC 渗透。
           </div>
         </section>
         """
     )
 
-    # 9-16：行动手册（拆成多页以形成 15–20 页长度）
+    # 11-18：行动手册
     action_pages = [
-        ("09 · 本周必做清单", ["锁定 TOP3 品类与 TOP10 系列", "对停滞/高库销比系列制定去化动作", "负库存先核口径再下结论"]),
-        ("10 · 进货闸门与补货策略", ["积压品类：先去化再补货", "畅销品类：补货小步快跑", "新品：试销-复盘-再铺货"]),
-        ("11 · 终端动销抓手（可验收）", ["陈列位提升（拍照验收）", "促销资源申请（ROI 复盘）", "KOC 门店渗透（名单+节奏）"]),
-        ("12 · 团队动作与复盘节奏", ["周例会：品类&系列金额复盘", "责任人：到门店/到货架/到照片", "月复盘：沉淀可复制打法"]),
-        ("13 · 风险点排查清单", ["低价/窜货/假货风险", "串码/账务冲减导致的负库存", "重复进表/时点口径不一致"]),
-        ("14 · 数据治理建议", ["统一经销商编码（主/关联客户簇）", "建立经销商主数据字典", "关键指标口径说明写入报告页尾"]),
-        ("15 · 附录：数据来源说明", ["新家园进货销售表：可用金额=库存", "PTS 计分卡：得分与排名", "DSR 能力表：覆盖/KOC/拜访"]),
-        ("16 · 附录：客户簇编码", bucket_codes),
+        ("11 · 本周必做清单", ["锁定 TOP3 品类与 TOP10 系列", "对停滞/高库销比系列制定去化动作", "负库存先核口径再下结论", "核对终端不达标门店并制定提升方案"]),
+        ("12 · 进货闸门与补货策略", ["积压品类：先去化再补货", "畅销品类：补货小步快跑", "新品：试销-复盘-再铺货", "KOC 品类优先保障货源"]),
+        ("13 · 终端动销抓手（可验收）", ["陈列位提升（拍照验收）", "促销资源申请（ROI 复盘）", "KOC 门店渗透（名单+节奏）", "不达标门店逐店核查动因"]),
+        ("14 · 团队动作与复盘节奏", ["周例会：品类&系列金额复盘", "DSR 拜访成交率周度跟踪", "月复盘：沉淀可复制打法", "季度 PTS 得分拆解与改进"]),
+        ("15 · 风险点排查清单", ["低价/窜货/假货风险", "串码/账务冲减导致的负库存", "重复进表/时点口径不一致", "KOC 网点流失预警"]),
+        ("16 · 数据治理建议", ["统一经销商编码（主/关联客户簇）", "建立经销商主数据字典", "关键指标口径说明写入报告页尾", "DSR-经销商编码映射校验"]),
+        ("17 · 附录：数据来源说明", [
+            "新家园进货销售表：可用金额=库存",
+            "经销商PTS计分卡：月/季/年得分与排名",
+            "经销商分销能力：网点/覆盖率/KOC/终端等级",
+            "DSR分销能力：DSR人员维度门店执行数据",
+            "城市经理分销能力：区域对标背景数据",
+        ]),
+        ("18 · 附录：客户簇编码", bucket_codes),
     ]
     for title, items in action_pages:
         pages.append(
@@ -773,6 +966,9 @@ def main():
     dealer_master = _load_dealer_master()
     pts_df = _load_pts()
     dsr_df = _load_dsr()
+    dealer_dist_df = _load_dealer_dist()
+    city_mgr_df = _load_city_mgr()
+    print(f"  pts={len(pts_df)} rows, dsr={len(dsr_df)} rows, dealer_dist={len(dealer_dist_df)} rows, city_mgr={len(city_mgr_df)} rows")
 
     # 待生成经销商列表：以进货表出现的编码为主
     codes_all = (
@@ -815,6 +1011,8 @@ def main():
             inv_all_agg=inv_all_agg,
             pts_df=pts_df,
             dsr_df=dsr_df,
+            dealer_dist_df=dealer_dist_df,
+            city_mgr_df=city_mgr_df,
             dealer_master=dealer_master,
         )
         fn = f"{_safe_filename(name)}_{str(code).strip()}_经销商白皮书.html"
